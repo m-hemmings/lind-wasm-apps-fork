@@ -1,0 +1,84 @@
+#!/bin/bash
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+LIND_ROOT="$(realpath "$SCRIPT_DIR/../..")"
+APPS_ROOT="$LIND_ROOT/lind-wasm-apps/lmbench"
+SYSROOT="$LIND_ROOT/src/glibc/sysroot"
+OUT_DIR="$APPS_ROOT/sysroot_overlay/lib/wasm32-wasi/merge_tmp"
+
+CLANG_LLVM="$LIND_ROOT/clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04"
+CLANG="$CLANG_LLVM/bin/clang"
+CLANGXX="$CLANG_LLVM/bin/clang++"
+LLVM_AR="$CLANG_LLVM/bin/llvm-ar"
+LLVM_LD="$CLANG_LLVM/bin/wasm-ld"
+
+export AR="$LLVM_AR"
+export CC="$CLANG --target=wasm32-unknown-wasi"
+export CXX="$CLANGXX --target=wasm32-unknown-wasi"
+export LD="$LLVM_LD"
+export CFLAGS="--sysroot=$SYSROOT -g -O2"
+export CXXFLAGS="--sysroot=$SYSROOT -g -O2"
+export LDFLAGS="--sysroot=$SYSROOT -Wl,--import-memory,--export-memory,--max-memory=67108864,--export=__stack_pointer,--export=__stack_low"
+
+if [ ! -x "$CLANG" ] || [ ! -x "$CLANGXX" ] || [ ! -x "$LLVM_AR" ] || [ ! -x "$LLVM_LD" ]; then
+    echo "[ERROR] Missing LLVM toolchain"
+    exit 1
+fi
+
+for f in "$SYSROOT/include/wasm32-wasi/stdio.h" "$SYSROOT/lib/wasm32-wasi/libc.a" "$SYSROOT/lib/wasm32-wasi/crt1.o"; do
+    if [ ! -r "$f" ]; then
+        echo "[ERROR] Missing sysroot component: $f"
+        exit 1
+    fi
+done
+
+if [ ! -w . ]; then
+    echo "[ERROR] Current directory not writable by $(whoami)"
+    exit 1
+fi
+
+missing_deps=()
+for dep in autoconf automake libtool; do
+    if ! command -v "$dep" >/dev/null 2>&1; then
+        missing_deps+=("$dep")
+    fi
+done
+
+if [ ${#missing_deps[@]} -gt 0 ]; then
+    if command -v apt >/dev/null 2>&1; then
+        if [ "$(id -u)" -eq 0 ]; then
+            apt update
+            apt install -y "${missing_deps[@]}"
+        elif command -v sudo >/dev/null 2>&1; then
+            sudo apt update
+            sudo apt install -y "${missing_deps[@]}"
+        else
+            echo "[ERROR] Missing ${missing_deps[*]}, install manually."
+            exit 1
+        fi
+    else
+        echo "[ERROR] No apt, install manually: ${missing_deps[*]}"
+        exit 1
+    fi
+fi
+
+if [ -f ./autogen.sh ]; then
+    chmod +x ./autogen.sh
+    ./autogen.sh
+fi
+
+./configure --host=wasm32-unknown-wasi --disable-gssapi \
+            --disable-shared \
+            --enable-static \
+            --with-pic \
+            --sysconfdir=/etc \
+            ac_cv_func_malloc_0_nonnull=yes \
+            ac_cv_func_memset=yes \
+            ac_cv_func_strchr=yes
+
+make
+mkdir -p "$OUT_DIR"
+find src -name '*.o' -exec mv {} "$OUT_DIR/" \;
+
+echo "[DONE] All object files moved to $OUT_DIR"
