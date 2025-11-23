@@ -1,3 +1,4 @@
+#include <stdlib.h> /* exit() */
 #ifdef	linux
 /*
  * flushdisk() - linux block cache clearing

@@ -230,7 +230,7 @@ error:		perror(name);
 	}
 	size = sb.st_size;
 	n = sprintf(hbuf, "HTTP/1.0 200 OK\r\n%s\r\nServer: lmhttp/0.1\r\nContent-Type: %s\r\nLast-Modified: %s\r\n\r\n",
-	    http_time(), type(name), date(&sb.st_mtime));
+	    http_time(), type(name), date(&sb.st_mtim.tv_sec));
 	if (write(sock, hbuf, n) != n) {
 		goto error;
 	}
