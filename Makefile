@@ -20,9 +20,10 @@ TOOL_ENV       := $(APPS_BUILD)/.toolchain.env
 JOBS ?= $(shell nproc 2>/dev/null || getconf _NPROCESSORS_ONLN || echo 4)
 
 # -------- Phonies -------------------------------------------------------------
-.PHONY: all preflight dirs print-config libtirpc merge-sysroot stubs lmbench clean clean-all
+.PHONY: all preflight dirs print-config libtirpc merge-sysroot stubs lmbench bash clean clean-all
 
-all: preflight libtirpc merge-sysroot stubs lmbench
+all: preflight libtirpc merge-sysroot stubs lmbench bash
+
 
 print-config:
 	@echo "LIND_WASM_ROOT=$(LIND_WASM_ROOT)"
@@ -157,4 +158,13 @@ clean:
 clean-all: clean
 	-rm -rf '$(APPS_OVERLAY)' '$(MERGED_SYSROOT)' '$(APPS_BIN_DIR)' '$(APPS_LIB_DIR)' '$(TOOL_ENV)'
 	$(MAKE) -C '$(APPS_ROOT)/libtirpc' distclean || true
+	
+# ---------------- bash (WASM build) -------------------------------------------
+# Uses bash/compile_bash.sh to build bash as a wasm32-wasi binary using the
+# merged sysroot and toolchain detected by preflight, and stages artifacts
+# under build/bin/bash/wasm32-wasi/.
+bash: stubs
+	. '$(TOOL_ENV)'
+	'$(APPS_ROOT)/bash/compile_bash.sh'
+
 
