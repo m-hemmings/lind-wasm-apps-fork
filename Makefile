@@ -144,7 +144,7 @@ stubs: merge-sysroot
 	"$$RANLIB" '$(APPS_LIB_DIR)/liblmb_stubs.a' || true
 
 # ---------------- lmbench (via compile_lmbench.sh) ---------------------------
-lmbench: stubs
+lmbench: libtirpc stubs
 	. '$(TOOL_ENV)'
 	'$(APPS_ROOT)/lmbench/src/compile_lmbench.sh'
 

@@ -1,9 +1,28 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Paths
+# lmbench WASM build helper for lind-wasm-apps
+#
+# High level:
+#   1) Load toolchain from build/.toolchain.env (set by top-level Makefile preflight).
+#   2) Build a combined libc.a = merged sysroot libc.a + libtirpc objects.
+#   3) Build lmbench with a WASI toolchain (REAL_CC).
+#   4) Stage binaries under build/bin/lmbench/wasm32-wasi.
+#   5) Run wasm-opt + wasmtime compile on staged binaries:
+#        - <name>.opt.wasm
+#        - <name>.cwasm
+
+
+# ----------------------------------------------------------------------
+# 0) Paths and repo layout
+# ----------------------------------------------------------------------
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+
+# Default LIND_WASM_ROOT to parent directory (layout: lind-wasm/lind-wasm-apps)
+if [[ -z "${LIND_WASM_ROOT:-}" ]]; then
+  LIND_WASM_ROOT="$(cd "$REPO_ROOT/.." && pwd)"
+fi
 
 APPS_BUILD="$REPO_ROOT/build"
 APPS_OVERLAY="$APPS_BUILD/sysroot_overlay"
@@ -11,6 +30,17 @@ MERGED_SYSROOT="$APPS_BUILD/sysroot_merged"
 APPS_LIB_DIR="$APPS_BUILD/lib"
 APPS_BIN_ROOT="$APPS_BUILD/bin/lmbench"
 TOOL_ENV="$APPS_BUILD/.toolchain.env"
+
+# We follow lind_compile's convention for WASMTIME_PROFILE (debug vs release)
+WASM_OPT="${WASM_OPT:-$LIND_WASM_ROOT/tools/binaryen/bin/wasm-opt}"
+
+WASMTIME_PROFILE="${WASMTIME_PROFILE:-release}"
+WASMTIME="${WASMTIME:-$LIND_WASM_ROOT/src/wasmtime/target/${WASMTIME_PROFILE}/wasmtime}"
+# Fallback to release if the requested profile isn't built yet.
+if [[ ! -x "$WASMTIME" ]]; then
+  ALT="$LIND_WASM_ROOT/src/wasmtime/target/release/wasmtime"
+  [[ -x "$ALT" ]] && WASMTIME="$ALT"
+fi
 
 # ----------------------------------------------------------------------
 # 1) Load toolchain from Makefile preflight
@@ -80,13 +110,11 @@ echo "[lmbench] creating combined libc.a → $COMBINED_LIBC"
 # Replace libc in merged sysroot so clang -lc picks up the combined one
 cp "$COMBINED_LIBC" "$BASE_LIBC"
 
-
-
 # ----------------------------------------------------------------------
 # 3) Run lmbench/src/Makefile with WASI toolchain
 # ----------------------------------------------------------------------
 LM_BENCH_BIN_DIR="$REPO_ROOT/lmbench/bin/wasm32-wasi"
-mkdir -p "$LM_BENCH_BIN_DIR"   # <<< this is the crucial fix
+mkdir -p "$LM_BENCH_BIN_DIR"
 
 REAL_CC="$CLANG --target=wasm32-unknown-wasi --sysroot=$MERGED_SYSROOT"
 CFLAGS="-O2 -g -I$MERGED_SYSROOT/include -I$MERGED_SYSROOT/include/wasm32-wasi -I$MERGED_SYSROOT/include/tirpc"
@@ -111,8 +139,6 @@ echo "[lmbench] building suite with REAL_CC='$REAL_CC'"
     LDLIBS="$LDLIBS" \
     all
 )
-
-    
 
 # ----------------------------------------------------------------------
 # 4) Stage binaries under build/bin/lmbench/wasm32-wasi
@@ -149,4 +175,51 @@ if (( have_files == 0 )); then
 fi
 
 echo "[lmbench] staged binaries under $OUT_DIR"
+
+# ----------------------------------------------------------------------
+# 5) wasm-opt + wasmtime compile per binary
+# ----------------------------------------------------------------------
+if [[ ! -x "$WASM_OPT" && ! -x "$WASMTIME" ]]; then
+  echo "[lmbench] NOTE: neither wasm-opt nor wasmtime found; skipping .opt.wasm/.cwasm generation."
+  exit 0
+fi
+
+echo "[lmbench] post-processing staged binaries under $OUT_DIR ..."
+
+shopt -s nullglob
+stage_bins=("$OUT_DIR"/*)
+shopt -u nullglob
+
+for f in "${stage_bins[@]}"; do
+  case "$f" in
+    *.o|*.a) continue ;;
+  esac
+
+  base="$(basename -- "$f")"
+  bin_for_compile="$f"
+
+  # wasm-opt pass -> <name>.opt.wasm
+  if [[ -x "$WASM_OPT" ]]; then
+    OPT_OUT="$OUT_DIR/${base}.opt.wasm"
+    echo "[lmbench]   wasm-opt: $base → $(basename -- "$OPT_OUT")"
+    if "$WASM_OPT" --epoch-injection --asyncify --debuginfo -O2 \
+        "$f" -o "$OPT_OUT"; then
+      bin_for_compile="$OPT_OUT"
+    else
+      echo "[lmbench]   WARNING: wasm-opt failed for '$base'; continuing with unoptimized binary."
+      bin_for_compile="$f"
+    fi
+  fi
+
+  # wasmtime compile -> <name>.cwasm
+  if [[ -x "$WASMTIME" ]]; then
+    CWASM_OUT="$OUT_DIR/${base}.cwasm"
+    echo "[lmbench]   wasmtime compile: $base → $(basename -- "$CWASM_OUT")"
+    if ! "$WASMTIME" compile "$bin_for_compile" -o "$CWASM_OUT"; then
+      echo "[lmbench]   WARNING: wasmtime compile failed for '$base'; continuing."
+    fi
+  fi
+done
+
+echo "[lmbench] post-processing complete."
 
