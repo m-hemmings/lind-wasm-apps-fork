@@ -154,8 +154,6 @@ clean:
 	       '$(APPS_BUILD)/wasi_compat_stubs.c' '$(APPS_BUILD)/wasi_compat_stubs.o' \
 	       '$(APPS_LIB_DIR)/liblmb_stubs.a'
 	-rm -rf '$(APPS_BIN_DIR)/lmbench'
-
-clean-all: clean
 	-rm -rf '$(APPS_OVERLAY)' '$(MERGED_SYSROOT)' '$(APPS_BIN_DIR)' '$(APPS_LIB_DIR)' '$(TOOL_ENV)'
 	$(MAKE) -C '$(APPS_ROOT)/libtirpc' distclean || true
 	
