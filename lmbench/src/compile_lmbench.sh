@@ -44,6 +44,8 @@ WASMTIME="${WASMTIME:-$(command -v wasmtime || true)}"
 if [[ -z "${WASMTIME}" ]]; then
   for cand in \
     "$LIND_WASM_ROOT/build/wasmtime" \
+    "$LIND_WASM_ROOT/build/wasmtime-debug" \
+    "$LIND_WASM_ROOT/build/wasmtime-release" \
     "$LIND_WASM_ROOT/build/wasmtime/target/${WASMTIME_PROFILE}/wasmtime" \
     "$LIND_WASM_ROOT/build/wasmtime/target/release/wasmtime" \
     "$LIND_WASM_ROOT/build/wasmtime/target/debug/wasmtime" \
