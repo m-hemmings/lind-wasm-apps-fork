@@ -43,6 +43,13 @@ WASMTIME="${WASMTIME:-$(command -v wasmtime || true)}"
 # Then common lind layouts
 if [[ -z "${WASMTIME}" ]]; then
   for cand in \
+    "$LIND_WASM_ROOT/build/wasmtime" \
+    "$LIND_WASM_ROOT/build/wasmtime/target/${WASMTIME_PROFILE}/wasmtime" \
+    "$LIND_WASM_ROOT/build/wasmtime/target/release/wasmtime" \
+    "$LIND_WASM_ROOT/build/wasmtime/target/debug/wasmtime" \
+    "$LIND_WASM_ROOT/build/target/${WASMTIME_PROFILE}/wasmtime" \
+    "$LIND_WASM_ROOT/build/target/release/wasmtime" \
+    "$LIND_WASM_ROOT/build/target/debug/wasmtime" \
     "$LIND_WASM_ROOT/wasmtime/target/${WASMTIME_PROFILE}/wasmtime" \
     "$LIND_WASM_ROOT/wasmtime/target/release/wasmtime" \
     "$LIND_WASM_ROOT/wasmtime/target/debug/wasmtime" \
