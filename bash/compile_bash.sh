@@ -51,22 +51,26 @@ if [[ -z "${LIND_WASM_ROOT:-}" ]]; then
   LIND_WASM_ROOT="$(cd "$APPS_ROOT/.." && pwd)"
 fi
 
-BASE_SYSROOT="${BASE_SYSROOT:-$LIND_WASM_ROOT/src/glibc/sysroot}"
+BASE_SYSROOT="${BASE_SYSROOT:-$LIND_WASM_ROOT/build/sysroot}"
 MERGED_SYSROOT="${APPS_MERGED:-$APPS_ROOT/build/sysroot_merged}"
 
 LLVM_BIN_DIR="$(dirname "$CLANG")"
 AR="${AR:-"$LLVM_BIN_DIR/llvm-ar"}"
 RANLIB="${RANLIB:-"$LLVM_BIN_DIR/llvm-ranlib"}"
 
-# We follow lind_compile's convention for WASMTIME_PROFILE (debug vs release)
 WASM_OPT="${WASM_OPT:-$LIND_WASM_ROOT/tools/binaryen/bin/wasm-opt}"
 
-WASMTIME_PROFILE="${WASMTIME_PROFILE:-release}"
-WASMTIME="${WASMTIME:-$LIND_WASM_ROOT/src/wasmtime/target/${WASMTIME_PROFILE}/wasmtime}"
-# Fallback to release if the requested profile isn't built yet.
-if [[ ! -x "$WASMTIME" ]]; then
-  ALT="$LIND_WASM_ROOT/src/wasmtime/target/release/wasmtime"
-  [[ -x "$ALT" ]] && WASMTIME="$ALT"
+WASMTIME="${WASMTIME:-}"
+if [[ -z "$WASMTIME" ]]; then
+  for CANDIDATE in \
+    "$LIND_WASM_ROOT/build/wasmtime-release" \
+    "$LIND_WASM_ROOT/build/wasmtime-debug"
+  do
+    if [[ -x "$CANDIDATE" ]]; then
+      WASMTIME="$CANDIDATE"
+      break
+    fi
+  done
 fi
 
 JOBS="${JOBS:-$(nproc 2>/dev/null || getconf _NPROCESSORS_ONLN || echo 4)}"
@@ -425,4 +429,3 @@ echo
 echo "[bash] build complete. Outputs under:"
 echo "  $BASH_OUT_DIR"
 ls -lh "$BASH_OUT_DIR" || true
-
