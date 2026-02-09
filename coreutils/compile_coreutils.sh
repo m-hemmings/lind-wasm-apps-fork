@@ -80,7 +80,7 @@ CC_WASM="$CLANG --target=wasm32-unknown-wasi --sysroot=$MERGED_SYSROOT -pthread"
 
 CFLAGS_WASM=(
   -O2 -g -std=gnu99 -pthread
-  -DHAVE_STRSIGNAL=1 -DHAVE_MKTIME=1
+  -DHAVE_STRSIGNAL=1 -DHAVE_MKTIME=1 # needed to bypass some configure checks
   -DSLOW_BUT_NO_HACKS=1
   "${WASM_COMPAT_INC[@]}"
   -I"$MERGED_SYSROOT/include"
@@ -335,6 +335,7 @@ patch_gnulib_slow_but_no_hacks
 
 HOST_TRIPLET="${HOST_TRIPLET:-wasm32-unknown-linux-gnu}"
 BUILD_TRIPLET="${BUILD_TRIPLET:-$(./config.guess 2>/dev/null || echo x86_64-unknown-linux-gnu)}"
+# IMPORTANT: --build != --host so configure knows it's cross and won't run conftest.
 
 echo "[coreutils] configuring (best-effort; may still warn)"
 (
@@ -344,7 +345,6 @@ echo "[coreutils] configuring (best-effort; may still warn)"
   rm -f config.cache || true
 
   # Run patched configure out-of-tree with explicit srcdir
-  # IMPORTANT: --build != --host so configure knows it's cross and won't run conftest.
   "$BUILD_ROOT/configure.patched" \
     --srcdir="$COREUTILS_ROOT" \
     --build="$BUILD_TRIPLET" \
