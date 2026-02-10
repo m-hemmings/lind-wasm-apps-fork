@@ -20,9 +20,9 @@ TOOL_ENV       := $(APPS_BUILD)/.toolchain.env
 JOBS ?= $(shell nproc 2>/dev/null || getconf _NPROCESSORS_ONLN || echo 4)
 
 # -------- Phonies -------------------------------------------------------------
-.PHONY: all preflight dirs print-config libtirpc merge-sysroot stubs lmbench bash clean clean-all
+.PHONY: all preflight dirs print-config libtirpc gnulib merge-sysroot stubs lmbench bash coreutils clean clean-all
 
-all: preflight libtirpc merge-sysroot stubs lmbench bash
+all: preflight libtirpc gnulib merge-sysroot stubs lmbench bash
 
 
 print-config:
@@ -93,13 +93,27 @@ libtirpc: preflight
 	. '$(TOOL_ENV)'
 	'$(APPS_ROOT)/libtirpc/compile_libtirpc.sh'
 
+# ---------------- gnulib (via compile_gnulib.sh) -----------------------------
+gnulib: preflight
+	. '$(TOOL_ENV)'
+	'$(APPS_ROOT)/gnulib/compile_gnulib.sh'
+
 # ---------------- Merge sysroot + overlay -------------------------------------
-merge-sysroot: libtirpc
+merge-sysroot: libtirpc gnulib
 	@echo "[merge] refreshing merged sysroot"
 	rsync -a --delete '$(BASE_SYSROOT)/' '$(MERGED_SYSROOT)/'
+
+	# libtirpc headers
 	mkdir -p '$(MERGED_SYSROOT)/include/tirpc' '$(MERGED_SYSROOT)/include/wasm32-wasi/tirpc'
 	rsync -a '$(APPS_OVERLAY)/usr/include/tirpc/' '$(MERGED_SYSROOT)/include/tirpc/' || true
 	rsync -a '$(APPS_OVERLAY)/usr/include/tirpc/' '$(MERGED_SYSROOT)/include/wasm32-wasi/tirpc/' || true
+
+	# gnulib headers (placed under include/gnulib/)
+	mkdir -p '$(MERGED_SYSROOT)/include/gnulib' '$(MERGED_SYSROOT)/include/wasm32-wasi/gnulib'
+	rsync -a '$(APPS_OVERLAY)/usr/include/gnulib/' '$(MERGED_SYSROOT)/include/gnulib/' || true
+	rsync -a '$(APPS_OVERLAY)/usr/include/gnulib/' '$(MERGED_SYSROOT)/include/wasm32-wasi/gnulib/' || true
+
+	# libs
 	rsync -a '$(APPS_OVERLAY)/usr/lib/wasm32-wasi/' '$(MERGED_SYSROOT)/lib/wasm32-wasi/' || true
 	rsync -a '$(APPS_OVERLAY)/lib/wasm32-wasi/'     '$(MERGED_SYSROOT)/lib/wasm32-wasi/' || true
 
@@ -148,15 +162,6 @@ lmbench: libtirpc stubs
 	. '$(TOOL_ENV)'
 	'$(APPS_ROOT)/lmbench/src/compile_lmbench.sh'
 
-clean:
-	$(MAKE) -C '$(APPS_ROOT)/lmbench/src' clean || true
-	-rm -f '$(APPS_BUILD)/.libm.c' '$(APPS_BUILD)/.libm.o' \
-	       '$(APPS_BUILD)/wasi_compat_stubs.c' '$(APPS_BUILD)/wasi_compat_stubs.o' \
-	       '$(APPS_LIB_DIR)/liblmb_stubs.a'
-	-rm -rf '$(APPS_BIN_DIR)/lmbench'
-	-rm -rf '$(APPS_OVERLAY)' '$(MERGED_SYSROOT)' '$(APPS_BIN_DIR)' '$(APPS_LIB_DIR)' '$(TOOL_ENV)'
-	$(MAKE) -C '$(APPS_ROOT)/libtirpc' distclean || true
-	
 # ---------------- bash (WASM build) -------------------------------------------
 # Uses bash/compile_bash.sh to build bash as a wasm32-wasi binary using the
 # merged sysroot and toolchain detected by preflight, and stages artifacts
@@ -165,4 +170,18 @@ bash: stubs
 	. '$(TOOL_ENV)'
 	'$(APPS_ROOT)/bash/compile_bash.sh'
 
+# ---------------- coreutils (WASM build) --------------------------------------
+# Uses coreutils/compile_coreutils.sh and requires the merged sysroot.
+coreutils: merge-sysroot
+	. '$(TOOL_ENV)'
+	'$(APPS_ROOT)/coreutils/compile_coreutils.sh'
+
+clean:
+	$(MAKE) -C '$(APPS_ROOT)/lmbench/src' clean || true
+	-rm -f '$(APPS_BUILD)/.libm.c' '$(APPS_BUILD)/.libm.o' \
+	       '$(APPS_BUILD)/wasi_compat_stubs.c' '$(APPS_BUILD)/wasi_compat_stubs.o' \
+	       '$(APPS_LIB_DIR)/liblmb_stubs.a'
+	-rm -rf '$(APPS_BIN_DIR)/lmbench'
+	-rm -rf '$(APPS_OVERLAY)' '$(MERGED_SYSROOT)' '$(APPS_BIN_DIR)' '$(APPS_LIB_DIR)' '$(TOOL_ENV)'
+	$(MAKE) -C '$(APPS_ROOT)/libtirpc' distclean || true
 
