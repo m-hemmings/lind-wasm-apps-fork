@@ -11,7 +11,7 @@ set -euo pipefail
 #   - Disable mountlist fatal (no mtab/mount table on WASI)
 #   - Patch a few gnulib portability #error sites to WASI-safe fallbacks
 #   - Stage produced wasm binaries even if some targets fail to link
-#   - wasm-opt + wasmtime compile (best-effort) on staged binaries
+#   - wasm-opt compile (best-effort) on staged binaries
 ###############################################################################
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
@@ -31,7 +31,6 @@ if [[ -z "${LIND_WASM_ROOT:-}" ]]; then
 fi
 
 WASM_OPT="${WASM_OPT:-$LIND_WASM_ROOT/tools/binaryen/bin/wasm-opt}"
-WASMTIME="${WASMTIME:-$LIND_WASM_ROOT/build/wasmtime}"
 
 JOBS="${JOBS:-$(nproc 2>/dev/null || getconf _NPROCESSORS_ONLN || echo 4)}"
 
@@ -439,7 +438,7 @@ print(f"[coreutils] staged {count} wasm binaries into {dst}")
 PY
 
 # ----------------------------------------------------------------------
-# 8) wasm-opt + wasmtime compile (best-effort) for each staged .wasm
+# 8) wasm-opt (best-effort) for each staged .wasm
 # ----------------------------------------------------------------------
 shopt -s nullglob
 wasm_files=("$STAGE_DIR"/*.wasm)
@@ -458,20 +457,6 @@ if [[ -x "$WASM_OPT" ]]; then
   done
 else
   echo "[coreutils] NOTE: wasm-opt not found at '$WASM_OPT'; skipping optimization."
-fi
-
-if [[ -x "$WASMTIME" ]]; then
-  echo "[coreutils] running wasmtime compile (best-effort) on staged binaries…"
-  for w in "${wasm_files[@]}"; do
-    # Prefer optimized wasm if it exists
-    in="$w"
-    opt="${w%.wasm}.opt.wasm"
-    [[ -f "$opt" ]] && in="$opt"
-    out="${w%.wasm}.cwasm"
-    "$WASMTIME" compile "$in" -o "$out" || true
-  done
-else
-  echo "[coreutils] NOTE: wasmtime not found at '$WASMTIME'; skipping .cwasm compilation."
 fi
 
 echo

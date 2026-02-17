@@ -25,7 +25,7 @@ set -euo pipefail
 #   5. Provide small WASI stubs (termcap, locale, getgroups).
 #
 #   6. Link bash.wasm into build/bin/bash/wasm32-wasi/bash.wasm and
-#      run wasm-opt + wasmtime compile (best-effort).
+#      run wasm-opt compile (best-effort).
 ###############################################################################
 
 # --- basic paths -------------------------------------------------------------
@@ -58,14 +58,7 @@ LLVM_BIN_DIR="$(dirname "$CLANG")"
 AR="${AR:-"$LLVM_BIN_DIR/llvm-ar"}"
 RANLIB="${RANLIB:-"$LLVM_BIN_DIR/llvm-ranlib"}"
 
-# We follow lind_compile's convention for WASMTIME_PROFILE (debug vs release)
 WASM_OPT="${WASM_OPT:-$LIND_WASM_ROOT/tools/binaryen/bin/wasm-opt}"
-
-WASMTIME="${WASMTIME:-$LIND_WASM_ROOT/build/wasmtime}"
-if [[ ! -x "${WASMTIME}" ]]; then
-  echo "ERROR: wasmtime missing: ${WASMTIME}" >&2
-  exit 127 # Note: This is the traditional "command not found" exit code, can be changed as needed
-fi
 
 JOBS="${JOBS:-$(nproc 2>/dev/null || getconf _NPROCESSORS_ONLN || echo 4)}"
 
@@ -395,7 +388,7 @@ if [[ ! -f "$BASH_WASM" ]]; then
 fi
 
 ###############################################################################
-# 8. wasm-opt + wasmtime compile (best-effort)
+# 8. wasm-opt compile (best-effort)
 ###############################################################################
 
 if [[ -x "$WASM_OPT" ]]; then
@@ -406,15 +399,6 @@ if [[ -x "$WASM_OPT" ]]; then
   BASH_WASM="$OPT_WASM"
 else
   echo "[bash] NOTE: wasm-opt not found; skipping optimization step."
-fi
-
-if [[ -x "$WASMTIME" ]]; then
-  echo "[bash] running wasmtime compile (best-effort)..."
-  BASH_CWASM="$BASH_OUT_DIR/bash.cwasm"
-  "$WASMTIME" compile "$BASH_WASM" -o "$BASH_CWASM" || \
-    echo "[bash] WARNING: wasmtime compile failed; continuing."
-else
-  echo "[bash] NOTE: wasmtime not found; skipping .cwasm compilation."
 fi
 
 popd >/dev/null

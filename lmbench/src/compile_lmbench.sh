@@ -8,7 +8,7 @@ set -euo pipefail
 #   2) Build a combined libc.a = merged sysroot libc.a + libtirpc objects.
 #   3) Build lmbench with a WASI toolchain (REAL_CC).
 #   4) Stage binaries under build/bin/lmbench/wasm32-wasi.
-#   5) Run wasm-opt + wasmtime compile on staged binaries:
+#   5) Run wasm-opt compile on staged binaries:
 #        - <name>.opt.wasm
 #        - <name>.cwasm
 
@@ -33,16 +33,8 @@ TOOL_ENV="$APPS_BUILD/.toolchain.env"
 MAX_WASM_MEMORY="${MAX_WASM_MEMORY:-67108864}"
 ENABLE_WASI_THREADS="${ENABLE_WASI_THREADS:-1}"
 
-# We follow lind_compile's convention for WASMTIME_PROFILE (debug vs release)
 WASM_OPT="${WASM_OPT:-$LIND_WASM_ROOT/tools/binaryen/bin/wasm-opt}"
 
-WASMTIME_PROFILE="${WASMTIME_PROFILE:-release}"
-WASMTIME="${WASMTIME:-$LIND_WASM_ROOT/build/wasmtime}"
-# Fallback to release if the requested profile isn't built yet.
-if [[ ! -x "${WASMTIME}" ]]; then
-  echo "ERROR: wasmtime missing: ${WASMTIME}" >&2
-  exit 127 # Note: This is the traditional "command not found" exit code, can be changed as needed
-fi
 
 # ----------------------------------------------------------------------
 # 1) Load toolchain from Makefile preflight
@@ -212,10 +204,10 @@ fi
 echo "[lmbench] staged binaries under $OUT_DIR"
 
 # ----------------------------------------------------------------------
-# 5) wasm-opt + wasmtime compile per binary
+# 5) wasm-opt compile per binary
 # ----------------------------------------------------------------------
-if [[ ! -x "$WASM_OPT" && ! -x "$WASMTIME" ]]; then
-  echo "[lmbench] NOTE: neither wasm-opt nor wasmtime found; skipping .opt.wasm/.cwasm generation."
+if [[ ! -x "$WASM_OPT" ]]; then
+  echo "[lmbench] NOTE: neither wasm-opt found; skipping .opt.wasm/.cwasm generation."
   exit 0
 fi
 
@@ -246,14 +238,6 @@ for f in "${stage_bins[@]}"; do
     fi
   fi
 
-  # wasmtime compile -> <name>.cwasm
-  if [[ -x "$WASMTIME" ]]; then
-    CWASM_OUT="$OUT_DIR/${base}.cwasm"
-    echo "[lmbench]   wasmtime compile: $base → $(basename -- "$CWASM_OUT")"
-    if ! "$WASMTIME" compile "$bin_for_compile" -o "$CWASM_OUT"; then
-      echo "[lmbench]   WARNING: wasmtime compile failed for '$base'; continuing."
-    fi
-  fi
 done
 
 echo "[lmbench] post-processing complete."
