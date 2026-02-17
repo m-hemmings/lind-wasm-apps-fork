@@ -680,13 +680,13 @@ benchmp_interval(void* _state)
 		settime(result >= 0. ? (uint64)result : 0.);
 	}
 
-	/* if the parent died, then give up */
-	if (getppid() == 1 && state->cleanup) {
-		if (benchmp_sigchld_handler == SIG_DFL)
-			signal(SIGCHLD, SIG_DFL);
-		(*state->cleanup)(0, state->cookie);
-		exit(0);
-	}
+	// /* if the parent died, then give up */
+	// if (getppid() == 1 && state->cleanup) {
+	// 	if (benchmp_sigchld_handler == SIG_DFL)
+	// 		signal(SIGCHLD, SIG_DFL);
+	// 	(*state->cleanup)(0, state->cookie);
+	// 	exit(0);
+	// }
 
 	timeout.tv_sec = 0;
 	timeout.tv_usec = 0;
