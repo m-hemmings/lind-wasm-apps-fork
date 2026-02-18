@@ -19,8 +19,7 @@ set -euo pipefail
 #   3. Delete host-built *.o / *.a for the parts we rebuild as WASM,
 #      but KEEP mkbuiltins and mkbuiltins.o as native tools.
 #
-#   4. Rebuild core bash objects and libs with the wasm32-wasi toolchain,
-#      skipping xmalloc helpers that conflict with the WASI glibc sysroot.
+#   4. Rebuild core bash objects and libs with the wasm32-wasi toolchain.
 #
 #   5. Provide small WASI stubs (termcap, locale, getgroups).
 #
@@ -195,7 +194,7 @@ make -j1 \
   trap.o input.o unwind_prot.o pathexp.o sig.o test.o version.o \
   alias.o array.o arrayfunc.o assoc.o braces.o bracecomp.o \
   bashhist.o bashline.o siglist.o list.o stringlib.o locale.o \
-  findcmd.o redir.o pcomplete.o pcomplib.o syntax.o
+  findcmd.o redir.o pcomplete.o pcomplib.o syntax.o xmalloc.o
 
 ###############################################################################
 # 5. WASM build: libraries in subdirectories
@@ -234,8 +233,7 @@ make -j1 -C lib/readline \
   libreadline.a libhistory.a
 
 # Avoid duplicate xmalloc/xrealloc by dropping readline's xmalloc.o from both
-# libreadline.a and libhistory.a. For now we rely on the sysroot libc's
-# xmalloc/xrealloc. TODO: replace this with a cleaner configure-time option.
+# libreadline.a and libhistory.a. bash's own xmalloc.o is built and linked directly instead
 for archive in libreadline.a libhistory.a; do
   if [[ -f "./lib/readline/$archive" ]]; then
     echo "[bash] [wasm] stripping xmalloc.o from ./lib/readline/$archive to avoid duplicate xmalloc/xrealloc (TODO: cleaner config option)."
@@ -378,7 +376,7 @@ $CC_WASM \
   trap.o input.o unwind_prot.o pathexp.o sig.o test.o version.o \
   alias.o array.o arrayfunc.o assoc.o braces.o bracecomp.o \
   bashhist.o bashline.o siglist.o list.o stringlib.o locale.o \
-  findcmd.o redir.o pcomplete.o pcomplib.o syntax.o \
+  findcmd.o redir.o pcomplete.o pcomplib.o syntax.o xmalloc.o \
   "$TPUTS_STUB_O" \
   -lbuiltins -lglob -lsh -lreadline -lhistory -ltilde
 
