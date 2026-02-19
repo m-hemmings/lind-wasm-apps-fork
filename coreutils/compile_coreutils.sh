@@ -31,6 +31,7 @@ if [[ -z "${LIND_WASM_ROOT:-}" ]]; then
 fi
 
 WASM_OPT="${WASM_OPT:-$LIND_WASM_ROOT/tools/binaryen/bin/wasm-opt}"
+LIND_BOOT="${LIND_BOOT:-$LIND_WASM_ROOT/build/lind-boot}"
 
 JOBS="${JOBS:-$(nproc 2>/dev/null || getconf _NPROCESSORS_ONLN || echo 4)}"
 
@@ -457,6 +458,38 @@ if [[ -x "$WASM_OPT" ]]; then
   done
 else
   echo "[coreutils] NOTE: wasm-opt not found at '$WASM_OPT'; skipping optimization."
+fi
+
+# ----------------------------------------------------------------------
+# 9) cwasm generation (best-effort) via lind-boot --precompile
+# ----------------------------------------------------------------------
+if [[ -x "$LIND_BOOT" ]]; then
+  echo "[coreutils] generating cwasm via lind-boot --precompile..."
+  shopt -s nullglob
+  opt_files=("$STAGE_DIR"/*.opt.wasm)
+  shopt -u nullglob
+  if (( ${#opt_files[@]} > 0 )); then
+    for w in "${opt_files[@]}"; do
+      if "$LIND_BOOT" --precompile "$w"; then
+        # Rename foo.opt.cwasm → foo.cwasm (drop .opt)
+        OPT_CWASM="${w%.wasm}.cwasm"
+        CLEAN_CWASM="${OPT_CWASM/.opt/}"
+        if [[ "$OPT_CWASM" != "$CLEAN_CWASM" && -f "$OPT_CWASM" ]]; then
+          mv "$OPT_CWASM" "$CLEAN_CWASM"
+        fi
+      else
+        echo "[coreutils] WARNING: lind-boot --precompile failed for '$(basename "$w")'; skipping."
+      fi
+    done
+  else
+    # fall back to raw .wasm if no opt files were produced
+    for w in "${wasm_files[@]}"; do
+      "$LIND_BOOT" --precompile "$w" || \
+        echo "[coreutils] WARNING: lind-boot --precompile failed for '$(basename "$w")'; skipping."
+    done
+  fi
+else
+  echo "[coreutils] NOTE: lind-boot not found at '$LIND_BOOT'; skipping cwasm generation."
 fi
 
 echo

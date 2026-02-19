@@ -34,6 +34,7 @@ MAX_WASM_MEMORY="${MAX_WASM_MEMORY:-67108864}"
 ENABLE_WASI_THREADS="${ENABLE_WASI_THREADS:-1}"
 
 WASM_OPT="${WASM_OPT:-$LIND_WASM_ROOT/tools/binaryen/bin/wasm-opt}"
+LIND_BOOT="${LIND_BOOT:-$LIND_WASM_ROOT/build/lind-boot}"
 
 
 # ----------------------------------------------------------------------
@@ -239,6 +240,31 @@ for f in "${stage_bins[@]}"; do
   fi
 
 done
+
+# ----------------------------------------------------------------------
+# 6) cwasm generation via lind-boot --precompile
+# ----------------------------------------------------------------------
+if [[ -x "$LIND_BOOT" ]]; then
+  echo "[lmbench] generating cwasm via lind-boot --precompile..."
+  shopt -s nullglob
+  opt_files=("$OUT_DIR"/*.opt.wasm)
+  shopt -u nullglob
+  for w in "${opt_files[@]}"; do
+    echo "[lmbench]   precompile: $(basename "$w")"
+    if "$LIND_BOOT" --precompile "$w"; then
+      # Rename foo.opt.cwasm → foo.cwasm (drop .opt)
+      OPT_CWASM="${w%.wasm}.cwasm"
+      CLEAN_CWASM="${OPT_CWASM/.opt/}"
+      if [[ "$OPT_CWASM" != "$CLEAN_CWASM" && -f "$OPT_CWASM" ]]; then
+        mv "$OPT_CWASM" "$CLEAN_CWASM"
+      fi
+    else
+      echo "[lmbench]   WARNING: lind-boot --precompile failed for '$(basename "$w")'; skipping."
+    fi
+  done
+else
+  echo "[lmbench] NOTE: lind-boot not found at '$LIND_BOOT'; skipping cwasm generation."
+fi
 
 echo "[lmbench] post-processing complete."
 
