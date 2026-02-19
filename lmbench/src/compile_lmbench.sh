@@ -27,7 +27,6 @@ fi
 APPS_BUILD="$REPO_ROOT/build"
 APPS_OVERLAY="$APPS_BUILD/sysroot_overlay"
 MERGED_SYSROOT="$APPS_BUILD/sysroot_merged"
-APPS_LIB_DIR="$APPS_BUILD/lib"
 APPS_BIN_ROOT="$APPS_BUILD/bin/lmbench"
 TOOL_ENV="$APPS_BUILD/.toolchain.env"
 MAX_WASM_MEMORY="${MAX_WASM_MEMORY:-67108864}"
@@ -100,8 +99,8 @@ echo "[lmbench] extracting base libc objects…"
 echo "[lmbench] adding libtirpc objects from $TIRPC_MERGE_DIR…"
 cp "${tirpc_objs[@]}" "$COMB_DIR/"
 
-mkdir -p "$APPS_LIB_DIR"
-COMBINED_LIBC="$APPS_LIB_DIR/libc.a"
+mkdir -p "$APPS_BUILD/lib"
+COMBINED_LIBC="$APPS_BUILD/lib/libc.a"
 
 echo "[lmbench] creating combined libc.a → $COMBINED_LIBC"
 (
@@ -125,7 +124,6 @@ LDFLAGS_WASM=(
   "-Wl,--import-memory,--export-memory,--max-memory=${MAX_WASM_MEMORY},--export=__stack_pointer,--export=__stack_low"
 "-L$MERGED_SYSROOT/lib/wasm32-wasi"
   "-L$MERGED_SYSROOT/usr/lib/wasm32-wasi"
-  "-L$APPS_LIB_DIR"
 )
 if [[ "$ENABLE_WASI_THREADS" == "1" ]]; then
   thread_flag="-mthread-model=posix"
@@ -146,8 +144,7 @@ if [[ "$ENABLE_WASI_THREADS" == "1" ]]; then
   fi
 fi
 LDFLAGS="${LDFLAGS_WASM[*]}"
-# liblmb_stubs.a comes from the Makefile 'stubs' target
-LDLIBS="-llmb_stubs -ltirpc -lm"
+LDLIBS="-ltirpc -lm"
 
 echo "[lmbench] building suite with REAL_CC='$REAL_CC'"
 (

@@ -20,9 +20,9 @@ TOOL_ENV       := $(APPS_BUILD)/.toolchain.env
 JOBS ?= $(shell nproc 2>/dev/null || getconf _NPROCESSORS_ONLN || echo 4)
 
 # -------- Phonies -------------------------------------------------------------
-.PHONY: all preflight dirs print-config libtirpc gnulib merge-sysroot stubs lmbench bash nginx coreutils clean clean-all
+.PHONY: all preflight dirs print-config libtirpc gnulib merge-sysroot lmbench bash nginx coreutils clean clean-all
 
-all: preflight libtirpc gnulib merge-sysroot stubs lmbench bash
+all: preflight libtirpc gnulib merge-sysroot lmbench bash
 
 
 print-config:
@@ -117,48 +117,8 @@ merge-sysroot: libtirpc gnulib
 	rsync -a '$(APPS_OVERLAY)/usr/lib/wasm32-wasi/' '$(MERGED_SYSROOT)/lib/wasm32-wasi/' || true
 	rsync -a '$(APPS_OVERLAY)/lib/wasm32-wasi/'     '$(MERGED_SYSROOT)/lib/wasm32-wasi/' || true
 
-# ---------------- Stubs (libm + WASI sched_*) --------------------------------
-# NOTE:
-#   The current lind-wasm WASI sysroot does not always ship a libm.a or
-#   implementations of the POSIX scheduler calls that lmbench expects
-#   (sched_get_priority_max, sched_setscheduler). To keep the lmbench build
-#   self-contained, we:
-#     * synthesize a tiny dummy libm.a when it is missing, and
-#     * build a small compatibility archive (liblmb_stubs.a) that provides
-#       "not supported" stubs for the missing scheduler APIs.
-#
-#   This lets lmbench link successfully without pretending the functionality
-#   is actually supported at runtime (the stubs just set errno = ENOTSUP and
-#   return an error).
-#
-#   TODO:
-#     Once the lind-wasm toolchain / sysroot grows proper libm and scheduler
-#     support for wasm32-wasi, we should delete this target and have lmbench
-#     link directly against the real libraries instead of these stubs.
-stubs: merge-sysroot
-	. '$(TOOL_ENV)'
-	if [[ ! -f '$(MERGED_SYSROOT)/lib/wasm32-wasi/libm.a' ]]; then
-	  echo "[stubs] creating stub libm.a"
-	  printf 'void __libm_stub(void){}' > '$(APPS_BUILD)/.libm.c'
-	  "$$CLANG" --target=wasm32-unknown-wasi --sysroot='$(MERGED_SYSROOT)' -c '$(APPS_BUILD)/.libm.c' -o '$(APPS_BUILD)/.libm.o'
-	  "$$AR" rcs '$(MERGED_SYSROOT)/lib/wasm32-wasi/libm.a' '$(APPS_BUILD)/.libm.o'
-	  "$$RANLIB" '$(MERGED_SYSROOT)/lib/wasm32-wasi/libm.a' || true
-	fi
-	cat > '$(APPS_BUILD)/wasi_compat_stubs.c' <<-'EOF'
-		#include <errno.h>
-		#include <sched.h>
-		int sched_get_priority_max(int policy) { (void)policy; errno = ENOTSUP; return -1; }
-		int sched_setscheduler(pid_t pid, int policy, const struct sched_param *param) {
-		  (void)pid; (void)policy; (void)param; errno = ENOTSUP; return -1;
-		}
-	EOF
-	"$$CLANG" --target=wasm32-unknown-wasi --sysroot='$(MERGED_SYSROOT)' -c \
-	  '$(APPS_BUILD)/wasi_compat_stubs.c' -o '$(APPS_BUILD)/wasi_compat_stubs.o'
-	"$$AR" rcs '$(APPS_LIB_DIR)/liblmb_stubs.a' '$(APPS_BUILD)/wasi_compat_stubs.o'
-	"$$RANLIB" '$(APPS_LIB_DIR)/liblmb_stubs.a' || true
-
 # ---------------- lmbench (via compile_lmbench.sh) ---------------------------
-lmbench: libtirpc stubs
+lmbench: libtirpc merge-sysroot
 	. '$(TOOL_ENV)'
 	'$(APPS_ROOT)/lmbench/src/compile_lmbench.sh'
 
@@ -166,7 +126,7 @@ lmbench: libtirpc stubs
 # Uses bash/compile_bash.sh to build bash as a wasm32-wasi binary using the
 # merged sysroot and toolchain detected by preflight, and stages artifacts
 # under build/bin/bash/wasm32-wasi/.
-bash: stubs
+bash: merge-sysroot
 	. '$(TOOL_ENV)'
 	'$(APPS_ROOT)/bash/compile_bash.sh'
 
@@ -174,7 +134,7 @@ bash: stubs
 # Uses nginx/compile_nginx.sh to build nginx as a wasm32-wasi binary using the
 # merged sysroot and toolchain detected by preflight, and stages artifacts
 # under build/bin/nginx/wasm32-wasi/.
-nginx: stubs
+nginx: merge-sysroot
 	. '$(TOOL_ENV)'
 	'$(APPS_ROOT)/nginx/compile_nginx.sh'
 
@@ -186,9 +146,6 @@ coreutils: merge-sysroot
 
 clean:
 	$(MAKE) -C '$(APPS_ROOT)/lmbench/src' clean || true
-	-rm -f '$(APPS_BUILD)/.libm.c' '$(APPS_BUILD)/.libm.o' \
-	       '$(APPS_BUILD)/wasi_compat_stubs.c' '$(APPS_BUILD)/wasi_compat_stubs.o' \
-	       '$(APPS_LIB_DIR)/liblmb_stubs.a'
 	-rm -rf '$(APPS_BIN_DIR)/lmbench'
 	-rm -rf '$(APPS_BIN_DIR)/nginx'
 	-$(MAKE) -C '$(APPS_ROOT)/nginx' clean || true
