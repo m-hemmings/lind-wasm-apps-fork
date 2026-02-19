@@ -1,7 +1,7 @@
 
 # Copyright (C) Igor Sysoev
 # Copyright (C) Nginx, Inc.
-
+# Patched for WASM cross-compilation
 
 echo $ngx_n "checking for $ngx_type size ...$ngx_c"
 
@@ -32,18 +32,57 @@ int main(void) {
 
 END
 
-
 ngx_test="$CC $CC_TEST_FLAGS $CC_AUX_FLAGS \
           -o $NGX_AUTOTEST $NGX_AUTOTEST.c $NGX_LD_OPT $ngx_feature_libs"
 
 eval "$ngx_test >> $NGX_AUTOCONF_ERR 2>&1"
 
-
+# For cross-compilation (WASM), we cannot run the test binary.
+# Try to run it, if that fails, use hardcoded sizes for wasm32.
 if [ -x $NGX_AUTOTEST ]; then
-    ngx_size=`$NGX_AUTOTEST`
-    echo " $ngx_size bytes"
+    ngx_size=`$NGX_AUTOTEST 2>/dev/null` || ngx_size=""
 fi
 
+# If we couldn't get the size by running, use hardcoded sizes for wasm32
+if [ -z "$ngx_size" ]; then
+    echo " (cross-compile detection)"
+
+    # wasm32 ILP32: int/long/pointers are 4 bytes
+    # off_t and time_t are 4 bytes in this sysroot (no _FILE_OFFSET_BITS=64)
+    case "$ngx_type" in
+        int)
+            ngx_size=4
+        ;;
+        long)
+            ngx_size=4
+        ;;
+        "long long")
+            ngx_size=8
+        ;;
+        "void *")
+            ngx_size=4
+        ;;
+        "size_t")
+            ngx_size=4
+        ;;
+        "off_t")
+            ngx_size=4
+        ;;
+        "time_t")
+            ngx_size=4
+        ;;
+        "sig_atomic_t")
+            ngx_size=4
+        ;;
+        *)
+            # Default to 4 for unknown types on wasm32
+            ngx_size=4
+        ;;
+    esac
+    echo " $ngx_size bytes (assumed for wasm32)"
+else
+    echo " $ngx_size bytes"
+fi
 
 case $ngx_size in
     4)

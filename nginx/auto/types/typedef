@@ -1,7 +1,7 @@
 
 # Copyright (C) Igor Sysoev
 # Copyright (C) Nginx, Inc.
-
+# Patched for WASM cross-compilation
 
 echo $ngx_n "checking for $ngx_type ...$ngx_c"
 
@@ -39,7 +39,9 @@ END
 
     eval "$ngx_test >> $NGX_AUTOCONF_ERR 2>&1"
 
-    if [ -x $NGX_AUTOTEST ]; then
+    # For cross-compilation, check if compilation succeeded (file exists)
+    # rather than if it's executable (WASM files aren't native executables)
+    if [ -f $NGX_AUTOTEST ]; then
         if [ $ngx_try = $ngx_type ]; then
             echo " found"
             ngx_found=yes
@@ -80,3 +82,4 @@ fi
 if [ $ngx_found != yes ]; then
     echo "typedef $ngx_found  $ngx_type;"   >> $NGX_AUTO_CONFIG_H
 fi
+

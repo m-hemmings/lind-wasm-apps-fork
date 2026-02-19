@@ -20,7 +20,7 @@ TOOL_ENV       := $(APPS_BUILD)/.toolchain.env
 JOBS ?= $(shell nproc 2>/dev/null || getconf _NPROCESSORS_ONLN || echo 4)
 
 # -------- Phonies -------------------------------------------------------------
-.PHONY: all preflight dirs print-config libtirpc gnulib merge-sysroot stubs lmbench bash coreutils clean clean-all
+.PHONY: all preflight dirs print-config libtirpc gnulib merge-sysroot stubs lmbench bash nginx coreutils clean clean-all
 
 all: preflight libtirpc gnulib merge-sysroot stubs lmbench bash
 
@@ -170,6 +170,14 @@ bash: stubs
 	. '$(TOOL_ENV)'
 	'$(APPS_ROOT)/bash/compile_bash.sh'
 
+# ---------------- nginx (WASM build) -------------------------------------------
+# Uses nginx/compile_nginx.sh to build nginx as a wasm32-wasi binary using the
+# merged sysroot and toolchain detected by preflight, and stages artifacts
+# under build/bin/nginx/wasm32-wasi/.
+nginx: stubs
+	. '$(TOOL_ENV)'
+	'$(APPS_ROOT)/nginx/compile_nginx.sh'
+
 # ---------------- coreutils (WASM build) --------------------------------------
 # Uses coreutils/compile_coreutils.sh and requires the merged sysroot.
 coreutils: merge-sysroot
@@ -182,6 +190,8 @@ clean:
 	       '$(APPS_BUILD)/wasi_compat_stubs.c' '$(APPS_BUILD)/wasi_compat_stubs.o' \
 	       '$(APPS_LIB_DIR)/liblmb_stubs.a'
 	-rm -rf '$(APPS_BIN_DIR)/lmbench'
+	-rm -rf '$(APPS_BIN_DIR)/nginx'
+	-$(MAKE) -C '$(APPS_ROOT)/nginx' clean || true
 	-rm -rf '$(APPS_OVERLAY)' '$(MERGED_SYSROOT)' '$(APPS_BIN_DIR)' '$(APPS_LIB_DIR)' '$(TOOL_ENV)'
 	$(MAKE) -C '$(APPS_ROOT)/libtirpc' distclean || true
 

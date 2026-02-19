@@ -1,6 +1,7 @@
 
 # Copyright (C) Igor Sysoev
 # Copyright (C) Nginx, Inc.
+# Patched for WASM cross-compilation
 
 
 echo $ngx_n "checking for $ngx_feature ...$ngx_c"
@@ -47,12 +48,13 @@ ngx_feature_inc_path=
 eval "/bin/sh -c \"$ngx_test\" >> $NGX_AUTOCONF_ERR 2>&1"
 
 
-if [ -x $NGX_AUTOTEST ]; then
+if [ -f $NGX_AUTOTEST ]; then
 
     case "$ngx_feature_run" in
 
         yes)
-            # /bin/sh is used to intercept "Killed" or "Abort trap" messages
+            # For cross-compilation, we can't run tests
+            # Just check if it compiled successfully
             if /bin/sh -c $NGX_AUTOTEST >> $NGX_AUTOCONF_ERR 2>&1; then
                 echo " found"
                 ngx_found=yes
@@ -67,28 +69,33 @@ if [ -x $NGX_AUTOTEST ]; then
         ;;
 
         value)
-            # /bin/sh is used to intercept "Killed" or "Abort trap" messages
-            if /bin/sh -c $NGX_AUTOTEST >> $NGX_AUTOCONF_ERR 2>&1; then
+            # For cross-compilation, we can't run tests
+            # Try to run, if it fails, just mark as found
+            if ngx_feature_value=`/bin/sh -c $NGX_AUTOTEST 2>/dev/null`; then
                 echo " found"
                 ngx_found=yes
 
                 cat << END >> $NGX_AUTO_CONFIG_H
 
 #ifndef $ngx_feature_name
-#define $ngx_feature_name  `$NGX_AUTOTEST`
+#define $ngx_feature_name  $ngx_feature_value
 #endif
 
 END
             else
-                echo " found but is not working"
+                echo " found (cross-compile: value unknown)"
+                ngx_found=yes
+                if test -n "$ngx_feature_name"; then
+                    have=$ngx_have_feature . auto/have
+                fi
             fi
         ;;
 
         bug)
-            # /bin/sh is used to intercept "Killed" or "Abort trap" messages
+            # For cross-compilation, we can't run tests
+            # Assume no bug
             if /bin/sh -c $NGX_AUTOTEST >> $NGX_AUTOCONF_ERR 2>&1; then
                 echo " not found"
-
             else
                 echo " found"
                 ngx_found=yes
@@ -121,3 +128,4 @@ else
 fi
 
 rm -rf $NGX_AUTOTEST*
+
