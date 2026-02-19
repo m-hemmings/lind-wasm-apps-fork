@@ -20,7 +20,7 @@ TOOL_ENV       := $(APPS_BUILD)/.toolchain.env
 JOBS ?= $(shell nproc 2>/dev/null || getconf _NPROCESSORS_ONLN || echo 4)
 
 # -------- Phonies -------------------------------------------------------------
-.PHONY: all preflight dirs print-config libtirpc gnulib merge-sysroot lmbench bash nginx coreutils clean clean-all
+.PHONY: all preflight dirs print-config libtirpc gnulib zlib openssl merge-sysroot lmbench bash nginx coreutils clean clean-all
 
 all: preflight libtirpc gnulib merge-sysroot lmbench bash
 
@@ -98,8 +98,18 @@ gnulib: preflight
 	. '$(TOOL_ENV)'
 	'$(APPS_ROOT)/gnulib/compile_gnulib.sh'
 
+# ---------------- zlib (via compile_zlib.sh) ----------------------------------
+zlib: preflight
+	. '$(TOOL_ENV)'
+	'$(APPS_ROOT)/zlib/compile_zlib.sh'
+
+# ---------------- openssl (via compile_openssl.sh) ----------------------------
+openssl: preflight
+	. '$(TOOL_ENV)'
+	'$(APPS_ROOT)/openssl/compile_openssl.sh'
+
 # ---------------- Merge sysroot + overlay -------------------------------------
-merge-sysroot: libtirpc gnulib
+merge-sysroot: libtirpc gnulib zlib openssl
 	@echo "[merge] refreshing merged sysroot"
 	rsync -a --delete '$(BASE_SYSROOT)/' '$(MERGED_SYSROOT)/'
 
@@ -112,6 +122,17 @@ merge-sysroot: libtirpc gnulib
 	mkdir -p '$(MERGED_SYSROOT)/include/gnulib' '$(MERGED_SYSROOT)/include/wasm32-wasi/gnulib'
 	rsync -a '$(APPS_OVERLAY)/usr/include/gnulib/' '$(MERGED_SYSROOT)/include/gnulib/' || true
 	rsync -a '$(APPS_OVERLAY)/usr/include/gnulib/' '$(MERGED_SYSROOT)/include/wasm32-wasi/gnulib/' || true
+
+	# zlib headers
+	cp -f '$(APPS_OVERLAY)/usr/include/zlib.h' '$(MERGED_SYSROOT)/include/' || true
+	cp -f '$(APPS_OVERLAY)/usr/include/zconf.h' '$(MERGED_SYSROOT)/include/' || true
+	cp -f '$(APPS_OVERLAY)/usr/include/zlib.h' '$(MERGED_SYSROOT)/include/wasm32-wasi/' || true
+	cp -f '$(APPS_OVERLAY)/usr/include/zconf.h' '$(MERGED_SYSROOT)/include/wasm32-wasi/' || true
+
+	# openssl headers
+	mkdir -p '$(MERGED_SYSROOT)/include/openssl' '$(MERGED_SYSROOT)/include/wasm32-wasi/openssl'
+	rsync -a '$(APPS_OVERLAY)/usr/include/openssl/' '$(MERGED_SYSROOT)/include/openssl/' || true
+	rsync -a '$(APPS_OVERLAY)/usr/include/openssl/' '$(MERGED_SYSROOT)/include/wasm32-wasi/openssl/' || true
 
 	# libs
 	rsync -a '$(APPS_OVERLAY)/usr/lib/wasm32-wasi/' '$(MERGED_SYSROOT)/lib/wasm32-wasi/' || true
