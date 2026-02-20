@@ -20,7 +20,7 @@ TOOL_ENV       := $(APPS_BUILD)/.toolchain.env
 JOBS ?= $(shell nproc 2>/dev/null || getconf _NPROCESSORS_ONLN || echo 4)
 
 # -------- Phonies -------------------------------------------------------------
-.PHONY: all preflight dirs print-config libtirpc gnulib zlib openssl merge-sysroot lmbench bash nginx coreutils curl grep sed clean clean-all
+.PHONY: all preflight dirs print-config libtirpc gnulib zlib openssl merge-sysroot lmbench bash nginx coreutils git curl grep sed clean clean-all
 
 all: preflight libtirpc gnulib merge-sysroot lmbench bash
 
@@ -164,6 +164,14 @@ nginx: merge-sysroot
 coreutils: merge-sysroot
 	. '$(TOOL_ENV)'
 	'$(APPS_ROOT)/coreutils/compile_coreutils.sh'
+
+# ---------------- git (WASM build) --------------------------------------------
+# Uses git/compile_git.sh to build git as a wasm32-wasi binary using the
+# merged sysroot and toolchain detected by preflight, and stages artifacts
+# under build/bin/git/wasm32-wasi/.
+git: merge-sysroot
+	. '$(TOOL_ENV)'
+	'$(APPS_ROOT)/git/compile_git.sh'
 
 # ---------------- curl (WASM build) -------------------------------------------
 # Uses curl/compile_curl.sh and requires the merged sysroot (OpenSSL + zlib).
