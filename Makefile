@@ -20,7 +20,7 @@ TOOL_ENV       := $(APPS_BUILD)/.toolchain.env
 JOBS ?= $(shell nproc 2>/dev/null || getconf _NPROCESSORS_ONLN || echo 4)
 
 # -------- Phonies -------------------------------------------------------------
-.PHONY: all preflight dirs print-config libtirpc gnulib zlib openssl merge-sysroot lmbench bash nginx coreutils clean clean-all
+.PHONY: all preflight dirs print-config libtirpc gnulib zlib openssl merge-sysroot lmbench bash nginx coreutils grep sed clean clean-all
 
 all: preflight libtirpc gnulib merge-sysroot lmbench bash
 
@@ -164,6 +164,16 @@ nginx: merge-sysroot
 coreutils: merge-sysroot
 	. '$(TOOL_ENV)'
 	'$(APPS_ROOT)/coreutils/compile_coreutils.sh'
+
+# ---------------- grep (WASM build) -------------------------------------------
+grep: merge-sysroot
+	. '$(TOOL_ENV)'
+	'$(APPS_ROOT)/grep/compile_grep.sh'
+
+# ---------------- sed (WASM build) --------------------------------------------
+sed: merge-sysroot
+	. '$(TOOL_ENV)'
+	'$(APPS_ROOT)/sed/compile_sed.sh'
 
 clean:
 	$(MAKE) -C '$(APPS_ROOT)/lmbench/src' clean || true
