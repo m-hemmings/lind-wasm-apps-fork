@@ -140,6 +140,29 @@ fu_cv_sys_mounted_vmount=no
 
 # Some configure scripts look for listmntent(3)
 ac_cv_func_listmntent=no
+
+# ---- WASI: force gnulib replacements for *at() functions ----
+# WASI headers declare these but don't implement them. Without this,
+# configure takes the "no replacement needed" branch in openat.m4
+# (yes+yes case) and the rpl_* objects never get compiled, causing
+# undefined symbol errors at link time.
+ac_cv_func_openat=no
+ac_cv_func_fstatat=no
+ac_cv_func_unlinkat=no
+ac_cv_func_fchmodat=no
+ac_cv_func_mkdirat=no
+ac_cv_func_fchownat=no
+ac_cv_func_linkat=no
+ac_cv_func_symlinkat=no
+ac_cv_func_readlinkat=no
+
+# ---- WASI: no inotify support ----
+# Prevents tail from trying to use inotify_add_watch/inotify_rm_watch.
+ac_cv_func_inotify_init=no
+
+# ---- WASI: no libcrypt ----
+# Prevents su from trying to link against crypt().
+ac_cv_search_crypt=no
 EOF
 
 export CONFIG_SITE="$CONFIG_SITE_FILE"
