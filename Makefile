@@ -15,12 +15,17 @@ APPS_OVERLAY   := $(APPS_BUILD)/sysroot_overlay
 MERGED_SYSROOT := $(APPS_BUILD)/sysroot_merged
 APPS_BIN_DIR   := $(APPS_BUILD)/bin
 APPS_LIB_DIR   := $(APPS_BUILD)/lib
+LIBTIRPC_STAMP := $(APPS_BUILD)/.stamp_libtirpc
+GNULIB_STAMP   := $(APPS_BUILD)/.stamp_gnulib
+ZLIB_STAMP     := $(APPS_BUILD)/.stamp_zlib
+OPENSSL_STAMP  := $(APPS_BUILD)/.stamp_openssl
+MERGE_STAMP    := $(APPS_BUILD)/.stamp_merge_sysroot
 
 TOOL_ENV       := $(APPS_BUILD)/.toolchain.env
 JOBS ?= $(shell nproc 2>/dev/null || getconf _NPROCESSORS_ONLN || echo 4)
 
 # -------- Phonies -------------------------------------------------------------
-.PHONY: all preflight dirs print-config libtirpc gnulib zlib openssl merge-sysroot lmbench bash nginx coreutils git curl grep sed clean clean-all
+.PHONY: all preflight dirs print-config libtirpc gnulib zlib openssl merge-sysroot lmbench bash nginx coreutils git curl grep sed clean clean-all rebuild-libs rebuild-sysroot
 
 all: preflight libtirpc gnulib merge-sysroot lmbench bash
 
@@ -52,7 +57,7 @@ dirs:
 #     container path for the toolchain), we should move this into a small
 #     script (e.g. scripts/detect_toolchain.sh) or reuse a common helper
 #     so the Makefile itself can stay leaner.
-preflight: dirs
+$(TOOL_ENV): | dirs
 	@echo "[*] preflight checks…"
 	[ -r '$(BASE_SYSROOT)/include/wasm32-wasi/stdio.h' ] || { echo "ERROR: sysroot headers missing at $(BASE_SYSROOT)"; exit 1; }
 	{
@@ -88,28 +93,42 @@ preflight: dirs
 	  "$$CLANG" --version | head -n1
 	}
 
+preflight: $(TOOL_ENV)
+
 # ---------------- libtirpc (via compile_libtirpc.sh) -------------------------
-libtirpc: preflight
+$(LIBTIRPC_STAMP): $(APPS_ROOT)/libtirpc/compile_libtirpc.sh | $(TOOL_ENV)
 	. '$(TOOL_ENV)'
 	'$(APPS_ROOT)/libtirpc/compile_libtirpc.sh'
+	touch '$@'
+
+libtirpc: $(LIBTIRPC_STAMP)
 
 # ---------------- gnulib (via compile_gnulib.sh) -----------------------------
-gnulib: preflight
+$(GNULIB_STAMP): $(APPS_ROOT)/gnulib/compile_gnulib.sh | $(TOOL_ENV)
 	. '$(TOOL_ENV)'
 	'$(APPS_ROOT)/gnulib/compile_gnulib.sh'
+	touch '$@'
+
+gnulib: $(GNULIB_STAMP)
 
 # ---------------- zlib (via compile_zlib.sh) ----------------------------------
-zlib: preflight
+$(ZLIB_STAMP): $(APPS_ROOT)/zlib/compile_zlib.sh | $(TOOL_ENV)
 	. '$(TOOL_ENV)'
 	'$(APPS_ROOT)/zlib/compile_zlib.sh'
+	touch '$@'
+
+zlib: $(ZLIB_STAMP)
 
 # ---------------- openssl (via compile_openssl.sh) ----------------------------
-openssl: preflight
+$(OPENSSL_STAMP): $(APPS_ROOT)/openssl/compile_openssl.sh | $(TOOL_ENV)
 	. '$(TOOL_ENV)'
 	'$(APPS_ROOT)/openssl/compile_openssl.sh'
+	touch '$@'
+
+openssl: $(OPENSSL_STAMP)
 
 # ---------------- Merge sysroot + overlay -------------------------------------
-merge-sysroot: libtirpc gnulib zlib openssl
+$(MERGE_STAMP): $(LIBTIRPC_STAMP) $(GNULIB_STAMP) $(ZLIB_STAMP) $(OPENSSL_STAMP)
 	@echo "[merge] refreshing merged sysroot"
 	rsync -a --delete '$(BASE_SYSROOT)/' '$(MERGED_SYSROOT)/'
 
@@ -137,9 +156,12 @@ merge-sysroot: libtirpc gnulib zlib openssl
 	# libs
 	rsync -a '$(APPS_OVERLAY)/usr/lib/wasm32-wasi/' '$(MERGED_SYSROOT)/lib/wasm32-wasi/' || true
 	rsync -a '$(APPS_OVERLAY)/lib/wasm32-wasi/'     '$(MERGED_SYSROOT)/lib/wasm32-wasi/' || true
+	touch '$@'
+
+merge-sysroot: $(MERGE_STAMP)
 
 # ---------------- lmbench (via compile_lmbench.sh) ---------------------------
-lmbench: libtirpc merge-sysroot
+lmbench: $(LIBTIRPC_STAMP) $(MERGE_STAMP)
 	. '$(TOOL_ENV)'
 	'$(APPS_ROOT)/lmbench/src/compile_lmbench.sh'
 
@@ -147,7 +169,7 @@ lmbench: libtirpc merge-sysroot
 # Uses bash/compile_bash.sh to build bash as a wasm32-wasi binary using the
 # merged sysroot and toolchain detected by preflight, and stages artifacts
 # under build/bin/bash/wasm32-wasi/.
-bash: merge-sysroot
+bash: $(MERGE_STAMP)
 	. '$(TOOL_ENV)'
 	'$(APPS_ROOT)/bash/compile_bash.sh'
 
@@ -155,13 +177,13 @@ bash: merge-sysroot
 # Uses nginx/compile_nginx.sh to build nginx as a wasm32-wasi binary using the
 # merged sysroot and toolchain detected by preflight, and stages artifacts
 # under build/bin/nginx/wasm32-wasi/.
-nginx: merge-sysroot
+nginx: $(MERGE_STAMP)
 	. '$(TOOL_ENV)'
 	'$(APPS_ROOT)/nginx/compile_nginx.sh'
 
 # ---------------- coreutils (WASM build) --------------------------------------
 # Uses coreutils/compile_coreutils.sh and requires the merged sysroot.
-coreutils: merge-sysroot
+coreutils: $(MERGE_STAMP)
 	. '$(TOOL_ENV)'
 	'$(APPS_ROOT)/coreutils/compile_coreutils.sh'
 
@@ -169,25 +191,31 @@ coreutils: merge-sysroot
 # Uses git/compile_git.sh to build git as a wasm32-wasi binary using the
 # merged sysroot and toolchain detected by preflight, and stages artifacts
 # under build/bin/git/wasm32-wasi/.
-git: merge-sysroot
+git: $(MERGE_STAMP)
 	. '$(TOOL_ENV)'
 	'$(APPS_ROOT)/git/compile_git.sh'
 
 # ---------------- curl (WASM build) -------------------------------------------
 # Uses curl/compile_curl.sh and requires the merged sysroot (OpenSSL + zlib).
-curl: merge-sysroot
+curl: $(MERGE_STAMP)
 	. '$(TOOL_ENV)'
 	'$(APPS_ROOT)/curl/compile_curl.sh'
 
 # ---------------- grep (WASM build) -------------------------------------------
-grep: merge-sysroot
+grep: $(MERGE_STAMP)
 	. '$(TOOL_ENV)'
 	'$(APPS_ROOT)/grep/compile_grep.sh'
 
 # ---------------- sed (WASM build) --------------------------------------------
-sed: merge-sysroot
+sed: $(MERGE_STAMP)
 	. '$(TOOL_ENV)'
 	'$(APPS_ROOT)/sed/compile_sed.sh'
+
+rebuild-libs:
+	rm -f '$(LIBTIRPC_STAMP)' '$(GNULIB_STAMP)' '$(ZLIB_STAMP)' '$(OPENSSL_STAMP)' '$(MERGE_STAMP)'
+
+rebuild-sysroot:
+	rm -f '$(MERGE_STAMP)'
 
 clean:
 	$(MAKE) -C '$(APPS_ROOT)/lmbench/src' clean || true
@@ -195,5 +223,5 @@ clean:
 	-rm -rf '$(APPS_BIN_DIR)/nginx'
 	-$(MAKE) -C '$(APPS_ROOT)/nginx' clean || true
 	-rm -rf '$(APPS_OVERLAY)' '$(MERGED_SYSROOT)' '$(APPS_BIN_DIR)' '$(APPS_LIB_DIR)' '$(TOOL_ENV)'
+	-rm -f '$(LIBTIRPC_STAMP)' '$(GNULIB_STAMP)' '$(ZLIB_STAMP)' '$(OPENSSL_STAMP)' '$(MERGE_STAMP)'
 	$(MAKE) -C '$(APPS_ROOT)/libtirpc' distclean || true
-
