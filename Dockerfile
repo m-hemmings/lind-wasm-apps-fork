@@ -5,15 +5,15 @@ WORKDIR /home/lind/lind-wasm/lind-wasm-apps
 
 # Stage 1: shared setup that multiple app builds depend on.
 FROM src AS shared
-RUN make -j"$(nproc)" -Otarget preflight merge-base-sysroot libtirpc
+RUN make -j"$(nproc)" -Otarget preflight merge-base-sysroot libtirpc >/dev/null 2>&1
 
 # Stage 2: apps that only need the base merged sysroot.
 FROM shared AS base-apps
-RUN make -j"$(nproc)" -Otarget bash nginx coreutils
+RUN make -j"$(nproc)" -Otarget bash nginx coreutils >/dev/null 2>&1
 
 # Stage 3: lmbench mutates merged libc.a, so run it after other apps.
 FROM base-apps AS lmbench-app
-RUN make -Otarget lmbench
+RUN make -Otarget lmbench >/dev/null 2>&1
 
 # Final image: include full workspace and staged build outputs.
 FROM securesystemslab/lind-wasm-dev:latest
